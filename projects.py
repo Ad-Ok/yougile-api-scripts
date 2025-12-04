@@ -17,25 +17,22 @@ def list_projects(client: YougileClient):
         print("Проектов не найдено")
         return
     
-    # Сортируем по timestamp (последние обновленные сначала)
-    projects_sorted = sorted(projects, key=lambda p: p.get('timestamp', 0), reverse=True)
-    
     print(f"\nНайдено проектов: {len(projects)}\n")
-    print(f"{'ID':<40} {'Название':<30} {'Последнее обновление':<25}")
-    print("-" * 100)
+    print(f"{'ID':<40} {'Название':<30} {'Дата создания':<20}")
+    print("-" * 95)
     
-    for project in projects_sorted:
+    for project in projects:
         project_id = project.get('id', '')
         title = project.get('title', 'Без названия')
         timestamp = project.get('timestamp', 0)
         
         # Конвертируем timestamp в дату
         if timestamp:
-            date_str = datetime.fromtimestamp(timestamp / 1000).strftime('%d.%m.%Y %H:%M')
+            date_str = datetime.fromtimestamp(timestamp / 1000).strftime('%d.%m.%Y')
         else:
             date_str = 'Неизвестно'
         
-        print(f"{project_id:<40} {title:<30} {date_str:<25}")
+        print(f"{project_id:<40} {title:<30} {date_str:<20}")
 
 
 def get_project(client: YougileClient, project_id: str):
@@ -50,8 +47,8 @@ def get_project(client: YougileClient, project_id: str):
     
     timestamp = project.get('timestamp', 0)
     if timestamp:
-        date_str = datetime.fromtimestamp(timestamp / 1000).strftime('%d.%m.%Y %H:%M:%S')
-        print(f"Последнее обновление: {date_str}")
+        date_str = datetime.fromtimestamp(timestamp / 1000).strftime('%d.%m.%Y')
+        print(f"Дата создания: {date_str}")
     
     print(f"Удалён: {project.get('deleted', False)}")
     print(f"Архивирован: {project.get('archived', False)}")

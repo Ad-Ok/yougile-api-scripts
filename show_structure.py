@@ -19,8 +19,8 @@ def show_project_structure(project_id: str):
     
     timestamp = project.get('timestamp', 0)
     if timestamp:
-        date_str = datetime.fromtimestamp(timestamp / 1000).strftime('%d.%m.%Y %H:%M:%S')
-        print(f"   Последнее обновление: {date_str}")
+        date_str = datetime.fromtimestamp(timestamp / 1000).strftime('%d.%m.%Y')
+        print(f"   Дата создания: {date_str}")
     
     print("=" * 80)
     print()
@@ -81,28 +81,9 @@ def main():
         print("Использование: python show_structure.py <project_id>")
         print("\nПолучите ID проекта командой:")
         print("  python projects.py list")
-        print("\nИли используйте 'last' для последнего обновленного проекта:")
-        print("  python show_structure.py last")
         sys.exit(1)
     
     project_id = sys.argv[1]
-    
-    # Если передан 'last' - получаем последний обновленный проект
-    if project_id.lower() == 'last':
-        try:
-            client = YougileClient()
-            projects = client.get_projects()
-            if not projects:
-                print("Проектов не найдено")
-                sys.exit(1)
-            
-            # Сортируем по timestamp и берем первый (последний обновленный)
-            projects_sorted = sorted(projects, key=lambda p: p.get('timestamp', 0), reverse=True)
-            project_id = projects_sorted[0]['id']
-            print(f"Выбран последний обновленный проект: {projects_sorted[0].get('title', 'Без названия')}\n")
-        except Exception as e:
-            print(f"✗ Ошибка при получении последнего проекта: {e}")
-            sys.exit(1)
     
     try:
         show_project_structure(project_id)
