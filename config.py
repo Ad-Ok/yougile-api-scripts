@@ -16,6 +16,10 @@ YOUGILE_PASSWORD = os.getenv("YOUGILE_PASSWORD")
 YOUGILE_COMPANY_ID = os.getenv("YOUGILE_COMPANY_ID")
 YOUGILE_API_KEY = os.getenv("YOUGILE_API_KEY")
 
+# Текущий рабочий контекст
+YOUGILE_CURRENT_PROJECT_ID = os.getenv("YOUGILE_CURRENT_PROJECT_ID")
+YOUGILE_CURRENT_BOARD_ID = os.getenv("YOUGILE_CURRENT_BOARD_ID")
+
 # Заголовки для запросов
 def get_headers(api_key=None):
     """Возвращает заголовки для запросов к API"""
@@ -59,3 +63,48 @@ def update_env_file(key, value):
         f.writelines(lines)
     
     print(f"✓ Значение {key} сохранено в .env файл")
+
+
+def get_current_context():
+    """
+    Получить текущий рабочий контекст
+    
+    Returns:
+        dict: {'project_id': str, 'board_id': str}
+    """
+    return {
+        'project_id': YOUGILE_CURRENT_PROJECT_ID,
+        'board_id': YOUGILE_CURRENT_BOARD_ID
+    }
+
+
+def require_project_context():
+    """
+    Проверить что установлен текущий проект
+    Вызывает SystemExit если проект не установлен
+    """
+    if not YOUGILE_CURRENT_PROJECT_ID:
+        print("✗ Текущий проект не установлен")
+        print("\nУстановите проект командой:")
+        print("  python context.py setup")
+        print("  или")
+        print("  python context.py project <название>")
+        import sys
+        sys.exit(1)
+    
+    return YOUGILE_CURRENT_PROJECT_ID
+
+
+def require_board_context():
+    """
+    Проверить что установлена текущая доска
+    Вызывает SystemExit если доска не установлена
+    """
+    if not YOUGILE_CURRENT_BOARD_ID:
+        print("✗ Текущая доска не установлена")
+        print("\nУстановите доску командой:")
+        print("  python context.py board <название>")
+        import sys
+        sys.exit(1)
+    
+    return YOUGILE_CURRENT_BOARD_ID
