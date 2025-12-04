@@ -49,6 +49,28 @@ def test_get_projects(client):
 
 
 @responses.activate
+def test_get_projects_with_content_wrapper(client):
+    """Тест получения проектов когда API возвращает объект с полем content"""
+    responses.add(
+        responses.GET,
+        f"{API_BASE_URL}/projects",
+        json={
+            "paging": {"count": 2, "limit": 50, "offset": 0},
+            "content": [
+                {"id": "proj-1", "title": "Project 1"},
+                {"id": "proj-2", "title": "Project 2"}
+            ]
+        },
+        status=200
+    )
+    
+    projects = client.get_projects()
+    
+    assert len(projects) == 2
+    assert projects[0]["title"] == "Project 1"
+
+
+@responses.activate
 def test_create_project(client):
     """Тест создания проекта"""
     responses.add(
@@ -81,6 +103,25 @@ def test_get_boards(client):
 
 
 @responses.activate
+def test_get_boards_with_content_wrapper(client):
+    """Тест получения досок когда API возвращает объект с полем content"""
+    responses.add(
+        responses.GET,
+        f"{API_BASE_URL}/boards",
+        json={
+            "paging": {"count": 1, "limit": 50, "offset": 0},
+            "content": [{"id": "board-1", "title": "Board 1"}]
+        },
+        status=200
+    )
+    
+    boards = client.get_boards()
+    
+    assert len(boards) == 1
+    assert boards[0]["id"] == "board-1"
+
+
+@responses.activate
 def test_create_board(client):
     """Тест создания доски"""
     responses.add(
@@ -102,6 +143,25 @@ def test_get_tasks(client):
         responses.GET,
         f"{API_BASE_URL}/task-list",
         json=[{"id": "task-1", "title": "Task 1"}],
+        status=200
+    )
+    
+    tasks = client.get_tasks()
+    
+    assert len(tasks) == 1
+    assert tasks[0]["title"] == "Task 1"
+
+
+@responses.activate
+def test_get_tasks_with_content_wrapper(client):
+    """Тест получения задач когда API возвращает объект с полем content"""
+    responses.add(
+        responses.GET,
+        f"{API_BASE_URL}/task-list",
+        json={
+            "paging": {"count": 1, "limit": 50, "offset": 0},
+            "content": [{"id": "task-1", "title": "Task 1"}]
+        },
         status=200
     )
     

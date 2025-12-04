@@ -82,7 +82,13 @@ class YougileClient:
     
     def get_projects(self) -> List[Dict[str, Any]]:
         """Получить список всех проектов"""
-        return self.get("projects")
+        result = self.get("projects")
+        # API может вернуть объект с полем content или напрямую список
+        if isinstance(result, dict) and 'content' in result:
+            return result['content']
+        elif isinstance(result, list):
+            return result
+        return [result]
     
     def get_project(self, project_id: str) -> Dict[str, Any]:
         """Получить проект по ID"""
@@ -115,7 +121,12 @@ class YougileClient:
     
     def get_boards(self) -> List[Dict[str, Any]]:
         """Получить список всех досок"""
-        return self.get("boards")
+        result = self.get("boards")
+        if isinstance(result, dict) and 'content' in result:
+            return result['content']
+        elif isinstance(result, list):
+            return result
+        return [result]
     
     def get_board(self, board_id: str) -> Dict[str, Any]:
         """Получить доску по ID"""
@@ -145,7 +156,12 @@ class YougileClient:
     
     def get_columns(self) -> List[Dict[str, Any]]:
         """Получить список всех колонок"""
-        return self.get("columns")
+        result = self.get("columns")
+        if isinstance(result, dict) and 'content' in result:
+            return result['content']
+        elif isinstance(result, list):
+            return result
+        return [result]
     
     def get_column(self, column_id: str) -> Dict[str, Any]:
         """Получить колонку по ID"""
@@ -176,7 +192,12 @@ class YougileClient:
                     Если False, использует /task-list (прямой порядок)
         """
         endpoint = "tasks" if reverse else "task-list"
-        return self.get(endpoint)
+        result = self.get(endpoint)
+        if isinstance(result, dict) and 'content' in result:
+            return result['content']
+        elif isinstance(result, list):
+            return result
+        return [result]
     
     def get_task(self, task_id: str) -> Dict[str, Any]:
         """Получить задачу по ID"""
@@ -207,7 +228,12 @@ class YougileClient:
     
     def get_users(self) -> List[Dict[str, Any]]:
         """Получить список пользователей компании"""
-        return self.get("users")
+        result = self.get("users")
+        if isinstance(result, dict) and 'content' in result:
+            return result['content']
+        elif isinstance(result, list):
+            return result
+        return [result]
     
     def get_user(self, user_id: str) -> Dict[str, Any]:
         """Получить пользователя по ID"""
