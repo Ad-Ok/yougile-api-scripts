@@ -181,12 +181,12 @@ def create_tasks_in_yougile(tasks, board_id, column_id, delay=1.5):
                         subtask_title = subtask_data['title']
                         subtask_desc = subtask_data.get('description', '')
                         
-                        # Создаем подзадачу как обычную задачу
-                        subtask = client.create_task(
-                            title=subtask_title,
-                            column_id=column_id,
-                            description=subtask_desc
-                        )
+                        # Создаем подзадачу БЕЗ columnId (чтобы не дублировалась на доске)
+                        # Используем прямой POST запрос без columnId
+                        subtask = client.post('tasks', {
+                            'title': subtask_title,
+                            'description': subtask_desc
+                        })
                         
                         subtask_ids.append(subtask['id'])
                         created_subtasks += 1
