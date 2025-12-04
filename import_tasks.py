@@ -5,8 +5,122 @@
 import sys
 import re
 import time
+import html
 from yougile_client import YougileClient
 from config import require_board_context
+
+
+def markdown_to_html(text):
+    """
+    Конвертирует простой markdown в HTML для Yougile
+    
+    Поддерживает:
+    - Блоки кода ```
+    - Переносы строк
+    - Списки (-, *)
+    - Жирный текст (**)
+    - Нумерованные списки
+    """
+    if not text:
+        return ''
+    
+    # Экранируем HTML
+    text = html.escape(text)
+    
+    # Блоки кода ``` (обрабатываем ДО разбиения на строки)
+    def replace_code_block(match):
+        code = match.group(1).strip()
+        # Сохраняем переносы строк внутри кода с помощью <br>
+        code_lines = code.split('\n')
+        # Добавляем отступы для визуального выделения
+        formatted_code = '<br>'.join('&nbsp;&nbsp;' + line if line.strip() else '' for line in code_lines)
+        return f'<div style="background: #f6f8fa; padding: 12px; margin: 8px 0; border-left: 3px solid #0969da; font-family: monospace; font-size: 13px;">{formatted_code}</div>'
+    
+    text = re.sub(r'```\n?(.*?)\n?```', replace_code_block, text, flags=re.DOTALL)
+    
+    # Жирный текст **text**
+    text = re.sub(r'\*\*(.*?)\*\*', r'<strong>\1</strong>', text)
+    
+    # Разбиваем на строки для обработки списков
+    lines = text.split('\n')
+    result = []
+    in_ul_list = False
+    in_ol_list = False
+    
+    for line in lines:
+        stripped = line.strip()
+        
+        # Пустая строка
+        if not stripped:
+            # Закрываем списки при пустой строке
+            if in_ul_list:
+                result.append('</ul>')
+                in_ul_list = False
+            if in_ol_list:
+                result.append('</ol>')
+                in_ol_list = False
+            # Добавляем разрыв только если предыдущий элемент не список
+            if result and not result[-1].endswith(('</ul>', '</ol>', '</div>')):
+                result.append('<br>')
+            continue
+        
+        # Маркированные списки (- или *)
+        if stripped.startswith('- ') or stripped.startswith('* '):
+            if in_ol_list:
+                result.append('</ol>')
+                in_ol_list = False
+            if not in_ul_list:
+                result.append('<ul>')
+                in_ul_list = True
+            item_text = stripped[2:]
+            result.append(f'<li>{item_text}</li>')
+        # Нумерованные списки (1., 2., и т.д.)
+        elif re.match(r'^\d+\.\s', stripped):
+            if in_ul_list:
+                result.append('</ul>')
+                in_ul_list = False
+            if not in_ol_list:
+                result.append('<ol>')
+                in_ol_list = True
+            item_text = re.sub(r'^\d+\.\s', '', stripped)
+            result.append(f'<li>{item_text}</li>')
+        else:
+            # Обычный текст - закрываем списки
+            if in_ul_list:
+                result.append('</ul>')
+                in_ul_list = False
+            if in_ol_list:
+                result.append('</ol>')
+                in_ol_list = False
+            # Добавляем текст с разрывом, если нужно
+            if result and not result[-1].endswith(('</ul>', '</ol>', '</div>', '<br>')):
+                result.append('<br>')
+            result.append(stripped)
+    
+    # Закрываем списки в конце
+    if in_ul_list:
+        result.append('</ul>')
+    if in_ol_list:
+        result.append('</ol>')
+    
+    # Объединяем без разделителей (уже добавлены <br> где нужно)
+    html_text = ''.join(result)
+    
+    # Оборачиваем в параграф
+    html_text = f'<p>{html_text}</p>'
+    
+    # Убираем множественные <br>
+    html_text = re.sub(r'(<br>){3,}', '<br><br>', html_text)
+    
+    # Убираем <br> в начале и конце параграфа
+    html_text = re.sub(r'<p><br>', '<p>', html_text)
+    html_text = re.sub(r'<br></p>', '</p>', html_text)
+    
+    # Убираем <br> перед и после списков/блоков
+    html_text = re.sub(r'<br>(<ul>|<ol>|<div)', r'\1', html_text)
+    html_text = re.sub(r'(</ul>|</ol>|</div>)<br>', r'\1', html_text)
+    
+    return html_text
 
 
 def parse_markdown_tasks(filepath):
@@ -156,12 +270,15 @@ def create_tasks_in_yougile(tasks, board_id, column_id, delay=1.5):
             task_title = task_data['title']
             task_desc = task_data.get('description', '')
             
+            # Конвертируем описание в HTML
+            task_desc_html = markdown_to_html(task_desc)
+            
             print(f"📝 Создаю задачу: {task_title}")
             
             task = client.create_task(
                 title=task_title,
                 column_id=column_id,
-                description=task_desc
+                description=task_desc_html
             )
             
             created_tasks += 1
@@ -181,11 +298,14 @@ def create_tasks_in_yougile(tasks, board_id, column_id, delay=1.5):
                         subtask_title = subtask_data['title']
                         subtask_desc = subtask_data.get('description', '')
                         
+                        # Конвертируем описание подзадачи в HTML
+                        subtask_desc_html = markdown_to_html(subtask_desc)
+                        
                         # Создаем подзадачу БЕЗ columnId (чтобы не дублировалась на доске)
                         # Используем прямой POST запрос без columnId
                         subtask = client.post('tasks', {
                             'title': subtask_title,
-                            'description': subtask_desc
+                            'description': subtask_desc_html
                         })
                         
                         subtask_ids.append(subtask['id'])
