@@ -252,6 +252,11 @@ def create_tasks_in_yougile(tasks, board_id, column_id, delay=1.5):
         board_id: ID доски
         column_id: ID колонки для создания задач
         delay: Задержка между запросами в секундах (по умолчанию 1.5)
+    
+    Note:
+        Задачи создаются в обратном порядке, чтобы в итоге они отображались
+        на доске в правильном порядке (сверху вниз, как в исходном файле).
+        Это связано с тем, что Yougile добавляет новые задачи в начало колонки.
     """
     client = YougileClient()
     
@@ -264,7 +269,9 @@ def create_tasks_in_yougile(tasks, board_id, column_id, delay=1.5):
     created_subtasks = 0
     failed = 0
     
-    for task_data in tasks:
+    # Создаем задачи в ОБРАТНОМ порядке, чтобы первая задача из файла
+    # оказалась вверху списка на доске
+    for task_data in reversed(tasks):
         try:
             # Создаем основную задачу
             task_title = task_data['title']
