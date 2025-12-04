@@ -183,21 +183,49 @@ class YougileClient:
     
     # === Задачи ===
     
-    def get_tasks(self, reverse: bool = False) -> List[Dict[str, Any]]:
+    def get_tasks(self, reverse: bool = False, all_pages: bool = True) -> List[Dict[str, Any]]:
         """
         Получить список задач
         
         Args:
             reverse: Если True, использует /tasks (обратный порядок)
                     Если False, использует /task-list (прямой порядок)
+            all_pages: Если True, получает все страницы (по умолчанию)
         """
         endpoint = "tasks" if reverse else "task-list"
-        result = self.get(endpoint)
-        if isinstance(result, dict) and 'content' in result:
-            return result['content']
-        elif isinstance(result, list):
-            return result
-        return [result]
+        
+        if not all_pages:
+            result = self.get(endpoint)
+            if isinstance(result, dict) and 'content' in result:
+                return result['content']
+            elif isinstance(result, list):
+                return result
+            return [result]
+        
+        # Получаем все страницы
+        all_tasks = []
+        offset = 0
+        limit = 50
+        
+        while True:
+            result = self.get(f"{endpoint}?limit={limit}&offset={offset}")
+            
+            if isinstance(result, dict) and 'content' in result:
+                all_tasks.extend(result['content'])
+                
+                # Проверяем, есть ли еще страницы
+                if not result.get('paging', {}).get('next', False):
+                    break
+                    
+                offset += limit
+            elif isinstance(result, list):
+                all_tasks.extend(result)
+                break
+            else:
+                all_tasks.append(result)
+                break
+        
+        return all_tasks
     
     def get_task(self, task_id: str) -> Dict[str, Any]:
         """Получить задачу по ID"""

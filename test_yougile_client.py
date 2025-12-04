@@ -306,3 +306,114 @@ def test_get_company(client):
     company = client.get_company()
     
     assert company["name"] == "Test Company"
+
+
+@responses.activate
+def test_get_tasks_with_pagination_single_page(client):
+    """Тест получения задач с пагинацией - одна страница"""
+    responses.add(
+        responses.GET,
+        f"{API_BASE_URL}/task-list",
+        match=[responses.matchers.query_param_matcher({"limit": "50", "offset": "0"})],
+        json={
+            "paging": {"count": 10, "limit": 50, "offset": 0, "next": False},
+            "content": [
+                {"id": "task-1", "title": "Task 1"},
+                {"id": "task-2", "title": "Task 2"}
+            ]
+        },
+        status=200
+    )
+    
+    tasks = client.get_tasks(all_pages=True)
+    
+    assert len(tasks) == 2
+    assert tasks[0]["title"] == "Task 1"
+
+
+@responses.activate
+def test_get_tasks_with_pagination_multiple_pages(client):
+    """Тест получения задач с пагинацией - несколько страниц"""
+    # Первая страница
+    responses.add(
+        responses.GET,
+        f"{API_BASE_URL}/task-list",
+        match=[responses.matchers.query_param_matcher({"limit": "50", "offset": "0"})],
+        json={
+            "paging": {"count": 50, "limit": 50, "offset": 0, "next": True},
+            "content": [{"id": f"task-{i}", "title": f"Task {i}"} for i in range(1, 51)]
+        },
+        status=200
+    )
+    
+    # Вторая страница
+    responses.add(
+        responses.GET,
+        f"{API_BASE_URL}/task-list",
+        match=[responses.matchers.query_param_matcher({"limit": "50", "offset": "50"})],
+        json={
+            "paging": {"count": 25, "limit": 50, "offset": 50, "next": False},
+            "content": [{"id": f"task-{i}", "title": f"Task {i}"} for i in range(51, 76)]
+        },
+        status=200
+    )
+    
+    tasks = client.get_tasks(all_pages=True)
+    
+    assert len(tasks) == 75
+    assert tasks[0]["title"] == "Task 1"
+    assert tasks[74]["title"] == "Task 75"
+
+
+@responses.activate
+def test_get_tasks_without_pagination(client):
+    """Тест получения задач без пагинации - одна страница"""
+    responses.add(
+        responses.GET,
+        f"{API_BASE_URL}/task-list",
+        json={
+            "paging": {"count": 2, "limit": 50, "offset": 0, "next": False},
+            "content": [
+                {"id": "task-1", "title": "Task 1"},
+                {"id": "task-2", "title": "Task 2"}
+            ]
+        },
+        status=200
+    )
+    
+    tasks = client.get_tasks(all_pages=False)
+    
+    assert len(tasks) == 2
+    assert tasks[0]["title"] == "Task 1"
+
+
+@responses.activate
+def test_archive_task(client):
+    """Тест архивации задачи"""
+    responses.add(
+        responses.PUT,
+        f"{API_BASE_URL}/tasks/task-1",
+        json={"id": "task-1", "title": "Task 1", "archived": True},
+        status=200
+    )
+    
+    result = client.update_task("task-1", archived=True)
+    
+    assert result["id"] == "task-1"
+    assert result.get("archived") == True
+
+
+@responses.activate
+def test_unarchive_task(client):
+    """Тест разархивации задачи"""
+    responses.add(
+        responses.PUT,
+        f"{API_BASE_URL}/tasks/task-1",
+        json={"id": "task-1", "title": "Task 1", "archived": False},
+        status=200
+    )
+    
+    result = client.update_task("task-1", archived=False)
+    
+    assert result["id"] == "task-1"
+    assert result.get("archived") == False
