@@ -24,6 +24,39 @@ from import_tasks import create_tasks_in_yougile  # noqa: F401  (использ�
 
 
 HEADER_RE = re.compile(r'^(#{1,6})\s+(.+?)\s*$')
+CHECKBOX_RE = re.compile(r'^\s*[-*]\s*\[([ xX])\]\s+(.+?)\s*$')
+
+
+def extract_checkboxes_as_subtasks(tasks: List[Dict]) -> None:
+    """
+    Для каждой задачи: вытащить из её description строки `- [ ] ...` / `- [x] ...`
+    и превратить их в подзадачи. Остальные строки описания сохранить.
+    Подзадачи добавляются ПОСЛЕ уже распарсенных H4-подзадач.
+    """
+    for task in tasks:
+        desc = task.get('description', '')
+        if not desc:
+            continue
+        kept_lines: List[str] = []
+        new_subtasks: List[Dict] = []
+        for line in desc.split('\n'):
+            m = CHECKBOX_RE.match(line)
+            if m:
+                checked = m.group(1).lower() == 'x'
+                title = m.group(2).strip()
+                # Уберём trailing "(N часов)" в скобках в конце — необязательно,
+                # пусть остаётся в названии для контекста.
+                new_subtasks.append({
+                    'title': title,
+                    'description': '',
+                    'completed': checked,
+                })
+            else:
+                kept_lines.append(line)
+        if new_subtasks:
+            # Чистим хвостовые пустые строки в оставшемся описании
+            task['description'] = '\n'.join(kept_lines).strip()
+            task['subtasks'].extend(new_subtasks)
 
 
 def parse_markdown_phases(filepath: str) -> List[Dict]:
@@ -127,6 +160,24 @@ def parse_markdown_phases(filepath: str) -> List[Dict]:
         target = None
 
     flush()
+
+    # Пост-обработка:
+    # 1) если у фазы есть чекбоксы в её собственном описании (вне H3),
+    #    создаём синтетическую задачу "Задачи фазы" и поднимаем их в неё;
+    # 2) внутри каждой задачи: чекбоксы → подзадачи.
+    for phase in phases:
+        phase_desc = phase.get('description', '')
+        has_phase_checkbox = phase_desc and any(
+            CHECKBOX_RE.match(line) for line in phase_desc.split('\n'))
+        if has_phase_checkbox:
+            synthetic = {'title': 'Задачи фазы', 'description': phase_desc, 'subtasks': []}
+            extract_checkboxes_as_subtasks([synthetic])
+            if synthetic['subtasks']:
+                phase['tasks'].insert(0, synthetic)
+                # очищаем описание фазы от поднятых строк
+                phase['description'] = synthetic['description']
+        extract_checkboxes_as_subtasks(phase['tasks'])
+
     return phases
 
 
@@ -145,29 +196,49 @@ def ensure_board(client: YougileClient, title: str, project_id: str,
     return board['id']
 
 
-def ensure_column(client: YougileClient, board_id: str, column_name: str,
-                  dry_run: bool = False) -> Optional[str]:
+DEFAULT_COLUMNS = ['Backlog', 'In Progress', 'Done', 'Declined']
+
+
+def ensure_board_columns(client: YougileClient, board_id: str, delay: float = 1.5,
+                         dry_run: bool = False) -> Optional[str]:
     """
-    Вернёт id колонки с указанным именем на доске. Если колонок нет вообще
-    или нужной нет — создаст с именем column_name.
+    Убеждается, что на доске есть все стандартные колонки (DEFAULT_COLUMNS).
+    Создаёт отсутствующие. Возвращает id колонки 'Backlog'.
     """
-    columns = client.get_columns()
-    board_columns = [c for c in columns
+    all_columns = client.get_columns()
+    board_columns = [c for c in all_columns
                      if c.get('boardId') == board_id and not c.get('deleted', False)]
-
-    # точное совпадение по имени
-    for c in board_columns:
-        if c.get('title', '').strip().lower() == column_name.strip().lower():
-            return c['id']
-
-    # если на доске уже есть колонки, но нет с нужным именем — берём первую
-    if board_columns:
-        return board_columns[0]['id']
+    existing_names = {c.get('title', '').strip() for c in board_columns}
 
     if dry_run:
+        missing = [n for n in DEFAULT_COLUMNS if n not in existing_names]
+        if missing:
+            print(f"    [dry-run] будут созданы колонки: {missing}")
+        # Вернём id существующего Backlog или None
+        for c in board_columns:
+            if c.get('title', '').strip() == 'Backlog':
+                return c['id']
         return None
-    col = client.create_column(title=column_name, board_id=board_id)
-    return col['id']
+
+    backlog_id = None
+    # YouGile вставляет новые колонки слева, поэтому создаём в обратном порядке,
+    # чтобы в UI они шли как DEFAULT_COLUMNS: Backlog → In Progress → Done → Declined.
+    for col_name in reversed(DEFAULT_COLUMNS):
+        if col_name in existing_names:
+            # колонка уже есть — найдём id
+            for c in board_columns:
+                if c.get('title', '').strip() == col_name:
+                    if col_name == 'Backlog':
+                        backlog_id = c['id']
+                    break
+        else:
+            col = client.create_column(title=col_name, board_id=board_id)
+            print(f"    [column] {col_name} → {col['id']}")
+            if col_name == 'Backlog':
+                backlog_id = col['id']
+            time.sleep(delay)
+
+    return backlog_id
 
 
 def print_summary(phases: List[Dict]) -> Dict[str, int]:
@@ -196,8 +267,8 @@ def main():
         description='Массовый импорт MD (## фаза / ### задача / #### подзадача) в YouGile')
     parser.add_argument('file', help='Путь к markdown файлу')
     parser.add_argument('--project-id', help='ID проекта (по умолчанию из .env: YOUGILE_CURRENT_PROJECT_ID)')
-    parser.add_argument('--default-column', default='Backlog',
-                        help='Имя колонки для задач (создаётся, если на доске нет колонок). По умолчанию: Backlog')
+    parser.add_argument('--phase-prefix', default='',
+                        help='Импортировать только доски, заголовок которых начинается с указанного префикса (например, "Phase ").')
     parser.add_argument('--delay', type=float, default=1.5,
                         help='Задержка между запросами, сек (по умолчанию 1.5)')
     parser.add_argument('--start-from-phase', type=int, default=1,
@@ -217,6 +288,14 @@ def main():
     if not phases:
         print("✗ В файле не найдено ни одной фазы (## H2)")
         sys.exit(1)
+
+    if args.phase_prefix:
+        before = len(phases)
+        phases = [p for p in phases if p['title'].startswith(args.phase_prefix)]
+        print(f"ℹ️  Фильтр --phase-prefix '{args.phase_prefix}': {before} → {len(phases)} досок")
+        if not phases:
+            print("✗ После фильтра не осталось ни одной фазы")
+            sys.exit(1)
 
     if args.start_from_phase > 1:
         if args.start_from_phase > len(phases):
@@ -255,8 +334,9 @@ def main():
             print(f"→ {board_id}")
             time.sleep(args.delay)
 
-            column_id = ensure_column(client, board_id, args.default_column)
-            print(f"  column '{args.default_column}' → {column_id}")
+            column_id = ensure_board_columns(client, board_id, delay=args.delay)
+            if not column_id:
+                raise RuntimeError("Не удалось получить/создать колонку Backlog")
             time.sleep(args.delay)
 
             if not phase['tasks']:

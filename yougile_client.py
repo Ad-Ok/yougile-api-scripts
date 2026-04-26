@@ -77,18 +77,32 @@ class YougileClient:
     def delete(self, endpoint: str) -> Dict[str, Any]:
         """DELETE запрос"""
         return self._request("DELETE", endpoint)
-    
+
+    def _get_paginated(self, endpoint: str, limit: int = 50) -> List[Dict[str, Any]]:
+        """Получить все страницы коллекции (для эндпоинтов вида /projects, /boards, /columns)."""
+        items: List[Dict[str, Any]] = []
+        offset = 0
+        while True:
+            sep = '&' if '?' in endpoint else '?'
+            result = self.get(f"{endpoint}{sep}limit={limit}&offset={offset}")
+            if isinstance(result, dict) and 'content' in result:
+                items.extend(result['content'])
+                if not result.get('paging', {}).get('next', False):
+                    break
+                offset += limit
+            elif isinstance(result, list):
+                items.extend(result)
+                break
+            else:
+                items.append(result)
+                break
+        return items
+
     # === Проекты ===
-    
+
     def get_projects(self) -> List[Dict[str, Any]]:
-        """Получить список всех проектов"""
-        result = self.get("projects")
-        # API может вернуть объект с полем content или напрямую список
-        if isinstance(result, dict) and 'content' in result:
-            return result['content']
-        elif isinstance(result, list):
-            return result
-        return [result]
+        """Получить список всех проектов (со всех страниц)"""
+        return self._get_paginated("projects")
     
     def get_project(self, project_id: str) -> Dict[str, Any]:
         """Получить проект по ID"""
@@ -120,13 +134,8 @@ class YougileClient:
     # === Доски ===
     
     def get_boards(self) -> List[Dict[str, Any]]:
-        """Получить список всех досок"""
-        result = self.get("boards")
-        if isinstance(result, dict) and 'content' in result:
-            return result['content']
-        elif isinstance(result, list):
-            return result
-        return [result]
+        """Получить список всех досок (со всех страниц)"""
+        return self._get_paginated("boards")
     
     def get_board(self, board_id: str) -> Dict[str, Any]:
         """Получить доску по ID"""
@@ -155,13 +164,8 @@ class YougileClient:
     # === Колонки ===
     
     def get_columns(self) -> List[Dict[str, Any]]:
-        """Получить список всех колонок"""
-        result = self.get("columns")
-        if isinstance(result, dict) and 'content' in result:
-            return result['content']
-        elif isinstance(result, list):
-            return result
-        return [result]
+        """Получить список всех колонок (со всех страниц)"""
+        return self._get_paginated("columns")
     
     def get_column(self, column_id: str) -> Dict[str, Any]:
         """Получить колонку по ID"""
@@ -256,12 +260,7 @@ class YougileClient:
     
     def get_users(self) -> List[Dict[str, Any]]:
         """Получить список пользователей компании"""
-        result = self.get("users")
-        if isinstance(result, dict) and 'content' in result:
-            return result['content']
-        elif isinstance(result, list):
-            return result
-        return [result]
+        return self._get_paginated("users")
     
     def get_user(self, user_id: str) -> Dict[str, Any]:
         """Получить пользователя по ID"""

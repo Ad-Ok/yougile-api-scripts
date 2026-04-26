@@ -34,45 +34,46 @@ def show_project_structure(project_id: str):
         return
     
     print(f"📊 Найдено досок: {len(project_boards)}\n")
-    
+
+    # Загружаем все колонки и задачи одним запросом каждый
+    all_columns = client.get_columns()
+    all_tasks = client.get_tasks(all_pages=True)
+
     # Для каждой доски
     for board_idx, board in enumerate(project_boards, 1):
         board_id = board['id']
         board_title = board.get('title', 'Без названия')
-        
+
         print(f"{board_idx}. 📋 ДОСКА: {board_title}")
         print(f"   ID: {board_id}")
-        
-        # Получаем детали доски с колонками
+
         try:
-            board_details = client.get_board(board_id)
-            
-            # Колонки
-            columns = board_details.get('columns', [])
+            # Фильтруем колонки по boardId
+            columns = [c for c in all_columns
+                       if c.get('boardId') == board_id and not c.get('deleted', False)]
+
             if columns:
                 print(f"   📌 Колонок: {len(columns)}")
                 for col_idx, col in enumerate(columns, 1):
                     col_title = col.get('title', 'Без названия')
                     col_id = col.get('id', '')
                     print(f"      {col_idx}. {col_title} (ID: {col_id})")
-                    
+
                     # Получаем задачи в колонке
-                    all_tasks = client.get_tasks()
                     col_tasks = [t for t in all_tasks if t.get('columnId') == col_id]
-                    
                     if col_tasks:
                         print(f"         📝 Задач: {len(col_tasks)}")
-                        for task_idx, task in enumerate(col_tasks[:3], 1):  # Показываем первые 3
+                        for task in col_tasks[:3]:
                             task_title = task.get('title', 'Без названия')
                             print(f"            • {task_title}")
                         if len(col_tasks) > 3:
                             print(f"            ... и ещё {len(col_tasks) - 3} задач(и)")
             else:
                 print(f"   📌 Колонок: 0")
-                
+
         except Exception as e:
             print(f"   ⚠️  Ошибка получения деталей: {e}")
-        
+
         print()
 
 
