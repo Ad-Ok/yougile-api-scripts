@@ -294,7 +294,7 @@ python update_descriptions.py tasks.md --limit 3
 - `import_all_tasks.py` - Массовый импорт нескольких досок (H2/H3/H4) из одного MD-файла
 - `update_descriptions.py` - Обновление описаний существующих задач
 - `config.py` - Конфигурация и утилиты для работы с контекстом
-- `test_*.py` - Тесты (57 тестов, 100% покрытие основных функций)
+- `tests/` - Юнит- и интеграционные тесты (`pytest`)
 
 ## API Documentation
 

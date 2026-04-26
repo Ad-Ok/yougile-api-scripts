@@ -18,13 +18,18 @@ pytest
 pytest --cov=. --cov-report=html --cov-report=term
 ```
 
+Все тесты лежат в каталоге `tests/`. Конфигурация — в `pytest.ini`
+(`testpaths = tests`, `pythonpath = .`), поэтому тесты импортируют модули
+проекта напрямую из корня.
+
 ## Запуск конкретного файла с тестами
 
 ```bash
-pytest test_config.py
-pytest test_auth.py
-pytest test_yougile_client.py
-pytest test_integration.py
+pytest tests/test_config.py
+pytest tests/test_auth.py
+pytest tests/test_yougile_client.py
+pytest tests/test_integration.py
+pytest tests/test_import_all_tasks.py
 ```
 
 ## Запуск тестов по маркерам
@@ -39,10 +44,12 @@ pytest -m integration
 
 ## Структура тестов
 
-- `test_config.py` - Тесты для конфигурации и утилит
-- `test_auth.py` - Тесты для авторизации и получения API ключей
-- `test_yougile_client.py` - Тесты для API клиента
-- `test_integration.py` - Интеграционные тесты
+- `tests/test_config.py` - Тесты для конфигурации и утилит
+- `tests/test_auth.py` - Тесты для авторизации и получения API ключей
+- `tests/test_yougile_client.py` - Тесты для API клиента
+- `tests/test_clear_board.py` - Тесты для скрипта очистки доски
+- `tests/test_integration.py` - Интеграционные тесты
+- `tests/test_import_all_tasks.py` - Тесты парсера для `import_all_tasks.py`
 
 ## Покрытие кода
 
