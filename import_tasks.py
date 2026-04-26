@@ -10,117 +10,155 @@ from yougile_client import YougileClient
 from config import require_board_context
 
 
-def markdown_to_html(text):
+def markdown_to_yougile_html(text):
     """
-    Конвертирует простой markdown в HTML для Yougile
+    Конвертирует markdown в HTML для Yougile
     
-    Поддерживает:
-    - Блоки кода ```
-    - Переносы строк
-    - Списки (-, *)
-    - Жирный текст (**)
-    - Нумерованные списки
+    Поддерживаемые теги Yougile:
+    - <b>, <i>, <u>, <strong>, <em>, <s>
+    - <ul>, <ol>, <li>
+    - <h1>, <h2>, <h3>, <h4>
+    - <p>, <br>
+    - <a href="">
+    - <table>, <tr>, <td>
+    - <span style="color/background">
+    - <p class="custom-block-indent-a/b/c"> - отступы
+    
+    Обработка:
+    - Блоки кода ``` -> таблица с отступом
+    - **Текст:** в начале строки -> <h4>
+    - **Текст:** в середине -> <b>
+    - `/path/` -> подсветка
+    - // комментарии -> серый цвет
+    - HTML символы -> &-сущности
     """
     if not text:
         return ''
     
-    # Экранируем HTML
-    text = html.escape(text)
-    
-    # Блоки кода ``` (обрабатываем ДО разбиения на строки)
-    def replace_code_block(match):
-        code = match.group(1).strip()
-        # Сохраняем переносы строк внутри кода с помощью <br>
-        code_lines = code.split('\n')
-        # Добавляем отступы для визуального выделения
-        formatted_code = '<br>'.join('&nbsp;&nbsp;' + line if line.strip() else '' for line in code_lines)
-        return f'<div style="background: #f6f8fa; padding: 12px; margin: 8px 0; border-left: 3px solid #0969da; font-family: monospace; font-size: 13px;">{formatted_code}</div>'
-    
-    text = re.sub(r'```\n?(.*?)\n?```', replace_code_block, text, flags=re.DOTALL)
-    
-    # Жирный текст **text**
-    text = re.sub(r'\*\*(.*?)\*\*', r'<strong>\1</strong>', text)
-    
-    # Разбиваем на строки для обработки списков
     lines = text.split('\n')
     result = []
-    in_ul_list = False
-    in_ol_list = False
+    in_code_block = False
+    code_lines = []
     
-    for line in lines:
-        stripped = line.strip()
+    i = 0
+    while i < len(lines):
+        line = lines[i]
         
-        # Пустая строка
-        if not stripped:
-            # Закрываем списки при пустой строке
-            if in_ul_list:
-                result.append('</ul>')
-                in_ul_list = False
-            if in_ol_list:
-                result.append('</ol>')
-                in_ol_list = False
-            # Добавляем разрыв только если предыдущий элемент не список
-            if result and not result[-1].endswith(('</ul>', '</ol>', '</div>')):
-                result.append('<br>')
+        # Начало/конец блока кода
+        if line.strip().startswith('```'):
+            if in_code_block:
+                # Конец блока - создаем таблицу с кодом
+                if code_lines:
+                    code_html = format_code_block(code_lines)
+                    result.append(code_html)
+                code_lines = []
+                in_code_block = False
+            else:
+                in_code_block = True
+            i += 1
             continue
         
-        # Маркированные списки (- или *)
-        if stripped.startswith('- ') or stripped.startswith('* '):
-            if in_ol_list:
-                result.append('</ol>')
-                in_ol_list = False
-            if not in_ul_list:
-                result.append('<ul>')
-                in_ul_list = True
-            item_text = stripped[2:]
-            result.append(f'<li>{item_text}</li>')
-        # Нумерованные списки (1., 2., и т.д.)
-        elif re.match(r'^\d+\.\s', stripped):
-            if in_ul_list:
-                result.append('</ul>')
-                in_ul_list = False
-            if not in_ol_list:
-                result.append('<ol>')
-                in_ol_list = True
-            item_text = re.sub(r'^\d+\.\s', '', stripped)
-            result.append(f'<li>{item_text}</li>')
+        # Собираем строки кода
+        if in_code_block:
+            code_lines.append(line)
+            i += 1
+            continue
+        
+        # Обычная строка - форматируем
+        formatted = format_text_line(line)
+        if formatted:
+            result.append(formatted)
+        
+        i += 1
+    
+    return ''.join(result)
+
+
+def format_code_block(code_lines):
+    """Форматирует блок кода как параграф с отступом"""
+    formatted_lines = []
+    
+    for line in code_lines:
+        # Подсвечиваем комментарии серым ПЕРЕД экранированием HTML
+        comment_match = re.search(r'(//|#)(.*)$', line)
+        if comment_match:
+            code_part = line[:comment_match.start()]
+            comment_part = line[comment_match.start():]
+            
+            # Экранируем обе части
+            code_part = html.escape(code_part)
+            comment_part = html.escape(comment_part)
+            
+            # Оборачиваем комментарий: span с цветом снаружи, strong внутри
+            line = code_part + f'<span style="color:#80899E;"><strong>{comment_part}</strong></span>'
         else:
-            # Обычный текст - закрываем списки
-            if in_ul_list:
-                result.append('</ul>')
-                in_ul_list = False
-            if in_ol_list:
-                result.append('</ol>')
-                in_ol_list = False
-            # Добавляем текст с разрывом, если нужно
-            if result and not result[-1].endswith(('</ul>', '</ol>', '</div>', '<br>')):
-                result.append('<br>')
-            result.append(stripped)
+            # Просто экранируем HTML
+            line = html.escape(line)
+        
+        # Сохраняем пробелы
+        line = line.replace(' ', '&nbsp;')
+        
+        formatted_lines.append(line)
     
-    # Закрываем списки в конце
-    if in_ul_list:
-        result.append('</ul>')
-    if in_ol_list:
-        result.append('</ol>')
+    code_content = '<br>'.join(formatted_lines)
     
-    # Объединяем без разделителей (уже добавлены <br> где нужно)
-    html_text = ''.join(result)
+    # Простой параграф с отступом (без таблицы)
+    return f'<p class="custom-block-indent-a">{code_content}</p>'
+
+
+def format_text_line(line):
+    """Форматирует обычную текстовую строку"""
+    stripped = line.strip()
     
-    # Оборачиваем в параграф
-    html_text = f'<p>{html_text}</p>'
+    # Пустая строка - пропускаем (не добавляем <br>)
+    if not stripped:
+        return ''
     
-    # Убираем множественные <br>
-    html_text = re.sub(r'(<br>){3,}', '<br><br>', html_text)
+    # Заголовок H4 для **Текст:** в начале строки
+    if re.match(r'^\*\*([^*]+):\*\*\s*$', stripped):
+        match = re.match(r'^\*\*([^*]+):\*\*', stripped)
+        title = match.group(1)
+        return f'<h4>{title}:</h4>'
     
-    # Убираем <br> в начале и конце параграфа
-    html_text = re.sub(r'<p><br>', '<p>', html_text)
-    html_text = re.sub(r'<br></p>', '</p>', html_text)
+    # Экранируем HTML
+    line_html = html.escape(stripped)
     
-    # Убираем <br> перед и после списков/блоков
-    html_text = re.sub(r'<br>(<ul>|<ol>|<div)', r'\1', html_text)
-    html_text = re.sub(r'(</ul>|</ol>|</div>)<br>', r'\1', html_text)
+    # **Жирный текст**
+    line_html = re.sub(r'\*\*([^*]+)\*\*', r'<b>\1</b>', line_html)
     
-    return html_text
+    # *Курсив*
+    line_html = re.sub(r'\*([^*]+)\*', r'<i>\1</i>', line_html)
+    
+    # `inline code` и `/paths/` - подсветка фоном
+    line_html = re.sub(
+        r'`([^`]+)`',
+        r'<span style="background: #f6f8fa; padding: 2px 4px; border-radius: 3px;">\1</span>',
+        line_html
+    )
+    line_html = re.sub(
+        r'(/[a-zA-Z0-9/_-]+/)',
+        r'<span style="background: #fff3cd; padding: 2px 4px;">\1</span>',
+        line_html
+    )
+    
+    # Маркированные списки
+    if stripped.startswith('- '):
+        content = line_html[2:]
+        return f'<ul><li>{content}</li></ul>'
+    
+    # Нумерованные списки
+    if re.match(r'^\d+\.\s', stripped):
+        content = re.sub(r'^\d+\.\s', '', line_html)
+        return f'<ol><li>{content}</li></ol>'
+    
+    # Обычный параграф
+    return f'<p>{line_html}</p>'
+
+
+# Алиас для обратной совместимости
+def markdown_to_html(text):
+    """Алиас для markdown_to_yougile_html"""
+    return markdown_to_yougile_html(text)
 
 
 def parse_markdown_tasks(filepath):
@@ -147,8 +185,10 @@ def parse_markdown_tasks(filepath):
     tasks = []
     current_task = None
     current_subtask = None
-    in_code_block = False
-    code_block_content = []
+    collecting_task_desc = False
+    collecting_subtask_desc = False
+    task_desc_lines = []
+    subtask_desc_lines = []
     
     lines = content.split('\n')
     i = 0
@@ -156,30 +196,19 @@ def parse_markdown_tasks(filepath):
     while i < len(lines):
         line = lines[i]
         
-        # Начало/конец блока кода
-        if line.strip().startswith('```'):
-            if in_code_block:
-                # Конец блока
-                if current_subtask:
-                    current_subtask['description'] = '\n'.join(code_block_content)
-                code_block_content = []
-                in_code_block = False
-            else:
-                # Начало блока
-                in_code_block = True
-            i += 1
-            continue
-        
-        # Внутри блока кода
-        if in_code_block:
-            code_block_content.append(line)
-            i += 1
-            continue
-        
         # Новая задача: ## Задача N: Название
         task_match = re.match(r'^## Задача (\d+):\s*(.+)$', line)
         if task_match:
+            # Сохраняем предыдущую подзадачу
+            if current_subtask and subtask_desc_lines:
+                current_subtask['description'] = '\n'.join(subtask_desc_lines).strip()
+                subtask_desc_lines = []
+            
+            # Сохраняем предыдущую задачу
             if current_task:
+                if task_desc_lines:
+                    current_task['description'] = '\n'.join(task_desc_lines).strip()
+                    task_desc_lines = []
                 tasks.append(current_task)
             
             task_num = task_match.group(1)
@@ -191,33 +220,25 @@ def parse_markdown_tasks(filepath):
                 'subtasks': []
             }
             current_subtask = None
-            i += 1
-            continue
-        
-        # Заголовок задачи: **Заголовок:**
-        if current_task and line.startswith('**Заголовок:**'):
-            title = line.replace('**Заголовок:**', '').strip()
-            if title:
-                current_task['title'] = title
-            i += 1
-            continue
-        
-        # Описание задачи: **Описание:**
-        if current_task and line.startswith('**Описание:**'):
-            desc = line.replace('**Описание:**', '').strip()
-            if desc:
-                current_task['description'] = desc
-            i += 1
-            continue
-        
-        # Подзадачи начинаются: **Подзадачи:**
-        if current_task and line.startswith('**Подзадачи:**'):
+            collecting_task_desc = True
+            collecting_subtask_desc = False
             i += 1
             continue
         
         # Новая подзадача: ### Подзадача N.M: Название
         subtask_match = re.match(r'^### Подзадача ([\d.]+):\s*(.+)$', line)
         if subtask_match and current_task:
+            # Сохраняем предыдущую подзадачу
+            if current_subtask and subtask_desc_lines:
+                current_subtask['description'] = '\n'.join(subtask_desc_lines).strip()
+                subtask_desc_lines = []
+            
+            # Сохраняем описание задачи если есть
+            if collecting_task_desc and task_desc_lines:
+                current_task['description'] = '\n'.join(task_desc_lines).strip()
+                task_desc_lines = []
+                collecting_task_desc = False
+            
             subtask_num = subtask_match.group(1)
             subtask_name = subtask_match.group(2)
             current_subtask = {
@@ -226,18 +247,33 @@ def parse_markdown_tasks(filepath):
                 'description': ''
             }
             current_task['subtasks'].append(current_subtask)
+            collecting_subtask_desc = True
             i += 1
             continue
         
-        # Описание подзадачи: **Описание:**
-        if current_subtask and line.startswith('**Описание:**'):
+        # Пропускаем заголовки разделов и пустые строки в начале
+        if line.startswith('#') or (not line.strip() and not collecting_task_desc and not collecting_subtask_desc):
             i += 1
             continue
+        
+        # Собираем описание задачи
+        if collecting_task_desc and current_task and not current_subtask:
+            task_desc_lines.append(line)
+        
+        # Собираем описание подзадачи
+        elif collecting_subtask_desc and current_subtask:
+            subtask_desc_lines.append(line)
         
         i += 1
     
-    # Добавить последнюю задачу
+    # Сохраняем последнюю подзадачу
+    if current_subtask and subtask_desc_lines:
+        current_subtask['description'] = '\n'.join(subtask_desc_lines).strip()
+    
+    # Сохраняем последнюю задачу
     if current_task:
+        if task_desc_lines and not current_task['description']:
+            current_task['description'] = '\n'.join(task_desc_lines).strip()
         tasks.append(current_task)
     
     return tasks
